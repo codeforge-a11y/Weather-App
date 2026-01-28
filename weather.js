@@ -1,0 +1,198 @@
+let latitude = 17.05;
+let longitude = 79.27;
+
+const METEOSTAT_KEY = ""; // Put your key here or leave empty to skip Meteostat
+const CACHE_KEY = "weather_cache_v4";
+const CACHE_TIME = 10 * 60 * 1000;
+
+const loadingEl = document.getElementById("loading");
+const offlineEl = document.getElementById("offline");
+
+const showLoading = v => loadingEl && (loadingEl.style.display = v ? "block" : "none");
+const formatTime = t => new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+function generateGrid(lat, lon) {
+  const points = [];
+  const delta = 0.1;
+  for (let latOffset = -delta; latOffset <= delta; latOffset += delta) {
+    for (let lonOffset = -delta; lonOffset <= delta; lonOffset += delta) {
+      points.push({ lat: lat + latOffset, lon: lon + lonOffset });
+    }
+  }
+  return points;
+}
+
+async function fetchMeteostat(lat, lon) {
+  if (!METEOSTAT_KEY) return null;
+  const r = await fetch(
+    `https://api.meteostat.net/v2/point/hourly?lat=${lat}&lon=${lon}&hours=1`,
+    { headers: { "x-api-key": METEOSTAT_KEY } }
+  );
+  const j = await r.json();
+  return j.data?.[0]?.temp ?? null;
+}
+
+async function getAreaTemperature(lat, lon) {
+  if (!METEOSTAT_KEY) return null; // Skip if no key
+  const grid = generateGrid(lat, lon);
+  const temps = await Promise.all(
+    grid.map(p => fetchMeteostat(p.lat, p.lon).catch(() => null))
+  );
+  const valid = temps.filter(t => t != null);
+  return valid.length ? valid.reduce((a, b) => a + b) / valid.length : null;
+}
+
+async function setCityName(lat, lon) {
+  try {
+    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`);
+    const data = await res.json();
+    if (data && data.address) {
+      const city = data.address.village || data.address.town || data.address.city || data.address.hamlet || "Unknown";
+      const state = data.address.state || "";
+      const country = data.address.country || "";
+      let displayName = city;
+      if (state && state !== city) displayName += `, ${state}`;
+      if (country) displayName += `, ${country}`;
+      document.querySelector(".city").textContent = displayName;
+    }
+  } catch {
+    document.querySelector(".city").textContent = "Location unknown";
+  }
+}
+
+async function fetchForecast(lat, lon) {
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
+    `&current=temperature_2m,is_day,weathercode,relative_humidity_2m,wind_speed_10m` +
+    `&hourly=temperature_2m,weathercode,precipitation_probability` +
+    `&daily=sunrise,sunset,precipitation_probability_max` +
+    `&timezone=auto`;
+  const res = await fetch(url);
+  return res.json();
+}
+
+async function fetchAQI(lat, lon) {
+  const url = `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lat}&longitude=${lon}&current=us_aqi`;
+  const res = await fetch(url);
+  const data = await res.json();
+  return data.current?.us_aqi ?? null;
+}
+
+function updateUI(temp, forecast, aqi) {
+  document.getElementById("temperature").textContent =
+    typeof temp === "number" && !isNaN(temp) ? `${temp.toFixed(1)}°C` : "--°C";
+
+  document.getElementById("icon").textContent =
+    forecast?.current ? getWeatherIcon(forecast.current.weathercode) : "❓";
+
+  document.getElementById("humidity").textContent =
+    forecast?.current ? `${forecast.current.relative_humidity_2m}%` : "--%";
+
+  document.getElementById("wind").textContent =
+    forecast?.current ? `${forecast.current.wind_speed_10m} km/h` : "-- km/h";
+
+  document.getElementById("rain").textContent =
+    forecast?.daily ? `${forecast.daily.precipitation_probability_max[0]}%` : "--%";
+
+  document.getElementById("sunrise").textContent =
+    forecast?.daily ? formatTime(forecast.daily.sunrise[0]) : "--:--";
+
+  document.getElementById("sunset").textContent =
+    forecast?.daily ? formatTime(forecast.daily.sunset[0]) : "--:--";
+
+  document.getElementById("aqi").textContent = aqi != null ? aqi : "--";
+
+  if (forecast?.current) {
+    document.body.classList.toggle("night", !forecast.current.is_day);
+  }
+}
+
+function renderHourly(forecast) {
+  const el = document.getElementById("hourly");
+  el.innerHTML = "";
+
+  const now = new Date().getHours();
+  let start = forecast.hourly.time.findIndex(
+    t => new Date(t).getHours() === now
+  );
+  if (start < 0) start = 0;
+
+  for (let i = start; i < start + 12 && i < forecast.hourly.time.length; i++) {
+    el.innerHTML += `
+      <div class="hour">
+        <div>${new Date(forecast.hourly.time[i])
+          .toLocaleTimeString([], { hour: "numeric" })}</div>
+        <div>${getWeatherIcon(forecast.hourly.weathercode[i])}</div>
+        <div>${forecast.hourly.temperature_2m[i]}°</div>
+      </div>
+    `;
+  }
+}
+
+function getWeatherIcon(code) {
+  if (code === 0) return "☀️";
+  if (code <= 2) return "⛅";
+  if (code <= 48) return "🌫️";
+  if (code <= 67) return "🌧️";
+  if (code <= 77) return "🌨️";
+  if (code <= 82) return "🌦️";
+  if (code <= 99) return "⛈️";
+  return "❓";
+}
+
+async function getWeather() {
+  showLoading(true);
+  if (!navigator.onLine) {
+    offlineEl.style.display = "block";
+    showLoading(false);
+    return;
+  }
+  offlineEl.style.display = "none";
+
+  try {
+    await setCityName(latitude, longitude);
+    const [areaTemp, forecast, aqi] = await Promise.all([
+      getAreaTemperature(latitude, longitude),
+      fetchForecast(latitude, longitude),
+      fetchAQI(latitude, longitude)
+    ]);
+    const temp = areaTemp ?? forecast.current.temperature_2m;
+
+    updateUI(temp, forecast, aqi);
+    renderHourly(forecast);  // <-- here is the call for hourly forecast
+  } catch (e) {
+    console.error(e);
+    document.querySelector(".city").textContent = "Error loading weather";
+    document.getElementById("temperature").textContent = "--°C";
+  }
+  showLoading(false);
+}
+
+async function searchCity() {
+  const q = document.getElementById("cityInput").value.trim();
+  if (!q) return;
+
+  const r = await fetch(
+    `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1`
+  );
+  const d = await r.json();
+  if (!d.length) return alert("Location not found");
+
+  latitude = +d[0].lat;
+  longitude = +d[0].lon;
+  await getWeather();
+}
+
+if (navigator.geolocation) {
+  navigator.geolocation.getCurrentPosition(
+    p => {
+      latitude = p.coords.latitude;
+      longitude = p.coords.longitude;
+      getWeather();
+    },
+    () => {
+      getWeather(); // fallback if location denied
+    }
+  );
+} else {
+  getWeather(); // fallback if no geolocation
+}
