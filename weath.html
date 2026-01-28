@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Weather</title>
+  <link rel="stylesheet" href="wea.css" />
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#2196f3" />
+</head>
+<body class="day">
+  <!-- OFFLINE / LOADING -->
+  <div id="offline">You are offline</div>
+  <div id="loading">Loading…</div>
+  <div class="app">
+    <!-- HEADER -->
+    <header>
+      <h1 class="city">Loading…</h1>
+      <div class="search">
+        <input id="cityInput" placeholder="Search village / city" />
+        <button onclick="searchCity()">Search</button>
+      </div>
+
+      <!-- Theme Switcher -->
+      <div class="theme-switch">
+        <button data-theme="day">☀️ Day</button>
+        <button data-theme="sunset">🌅 Sunset</button>
+        <button data-theme="night">🌙 Night</button>
+        <button data-theme="cloudy">☁️ Cloudy</button>
+      </div>
+    </header>
+
+    <!-- CURRENT WEATHER -->
+    <section class="current">
+      <div id="icon" class="icon sunny">☀️</div>
+      <div id="temperature" class="temp">--°C</div>
+
+      <div class="metrics">
+        <div class="metric">
+          <span class="label">Humidity</span>
+          <span class="icon">💧</span>
+          <span id="humidity" class="value">--%</span>
+        </div>
+        <div class="metric">
+          <span class="label">Rain</span>
+          <span class="icon">🌧️</span>
+          <span id="rain" class="value">--%</span>
+        </div>
+        <div class="metric">
+          <span class="label">Wind</span>
+          <span class="icon">💨</span>
+          <span id="wind" class="value">-- km/h</span>
+        </div>
+        <div class="metric">
+          <span class="label">AQI</span>
+          <span class="icon">🎚️</span>
+          <span id="aqi" class="value">--</span>
+        </div>
+      </div>
+
+      <div class="sun">
+        <span>🌅 <span id="sunrise">--</span></span>
+        <span>🌇 <span id="sunset">--</span></span>
+      </div>
+    </section>
+
+    <!-- HOURLY FORECAST -->
+    <h2>Next 12 Hours</h2>
+    <section id="hourly" class="hourly">
+      <!-- Example 12 hourly cards -->
+      <div class="hour"><div class="hour-time">6 AM</div><div class="hour-icon">☀️</div><div class="hour-temp">22°C</div></div>
+      <div class="hour"><div class="hour-time">7 AM</div><div class="hour-icon">☀️</div><div class="hour-temp">23°C</div></div>
+      <div class="hour"><div class="hour-time">8 AM</div><div class="hour-icon">☀️</div><div class="hour-temp">24°C</div></div>
+      <div class="hour"><div class="hour-time">9 AM</div><div class="hour-icon">☀️</div><div class="hour-temp">25°C</div></div>
+      <div class="hour"><div class="hour-time">10 AM</div><div class="hour-icon">☀️</div><div class="hour-temp">26°C</div></div>
+      <div class="hour"><div class="hour-time">11 AM</div><div class="hour-icon">🌤️</div><div class="hour-temp">27°C</div></div>
+      <div class="hour"><div class="hour-time">12 PM</div><div class="hour-icon">🌤️</div><div class="hour-temp">28°C</div></div>
+      <div class="hour"><div class="hour-time">1 PM</div><div class="hour-icon">☀️</div><div class="hour-temp">28°C</div></div>
+      <div class="hour"><div class="hour-time">2 PM</div><div class="hour-icon">☀️</div><div class="hour-temp">29°C</div></div>
+      <div class="hour"><div class="hour-time">3 PM</div><div class="hour-icon">☀️</div><div class="hour-temp">29°C</div></div>
+      <div class="hour"><div class="hour-time">4 PM</div><div class="hour-icon">🌤️</div><div class="hour-temp">28°C</div></div>
+      <div class="hour"><div class="hour-time">5 PM</div><div class="hour-icon">🌤️</div><div class="hour-temp">27°C</div></div>
+    </section>
+  </div>
+
+  <script src="weather.js"></script>
+  <script>
+    // Automatic day/night theme based on time
+    function setThemeByTime() {
+      const hour = new Date().getHours();
+      if (hour >= 19 || hour < 6) {
+        document.body.classList.add('night');
+      } else {
+        document.body.classList.remove('night');
+      }
+    }
+    setThemeByTime();
+
+    // Manual theme switch
+    const buttons = document.querySelectorAll('.theme-switch button');
+    buttons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.body.className = btn.dataset.theme;
+      });
+    });
+
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("service-worker.js");
+    }
+  </script>
+</body>
+</html>
