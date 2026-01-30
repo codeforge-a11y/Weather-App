@@ -1,222 +1,120 @@
-let latitude = 17.05;
-let longitude = 79.27;
-
-const METEOSTAT_KEY = ""; // Put your key here or leave empty to skip Meteostat
-const CACHE_KEY = "weather_cache_v4";
-const CACHE_TIME = 10 * 60 * 1000;
-
-const loadingEl = document.getElementById("loading");
-const offlineEl = document.getElementById("offline");
-
-const showLoading = v => loadingEl && (loadingEl.style.display = v ? "block" : "none");
-const formatTime = t => new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-
-function generateGrid(lat, lon) {
-  const points = [];
-  const delta = 0.1;
-  for (let latOffset = -delta; latOffset <= delta; latOffset += delta) {
-    for (let lonOffset = -delta; lonOffset <= delta; lonOffset += delta) {
-      points.push({ lat: lat + latOffset, lon: lon + lonOffset });
-    }
-  }
-  return points;
-}
-
-async function fetchMeteostat(lat, lon) {
-  if (!METEOSTAT_KEY) return null;
-  const r = await fetch(
-    `https://api.meteostat.net/v2/point/hourly?lat=${lat}&lon=${lon}&hours=1`,
-    { headers: { "x-api-key": METEOSTAT_KEY } }
-  );
-  const j = await r.json();
-  return j.data?.[0]?.temp ?? null;
-}
-
-async function getAreaTemperature(lat, lon) {
-  if (!METEOSTAT_KEY) return null; // Skip if no key
-  const grid = generateGrid(lat, lon);
-  const temps = await Promise.all(
-    grid.map(p => fetchMeteostat(p.lat, p.lon).catch(() => null))
-  );
-  const valid = temps.filter(t => t != null);
-  return valid.length ? valid.reduce((a, b) => a + b) / valid.length : null;
-}
-
-async function setCityName(lat, lon) {
-  try {
-    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`);
-    const data = await res.json();
-    if (data && data.address) {
-      const city = data.address.village || data.address.town || data.address.city || data.address.hamlet || "Unknown";
-      const state = data.address.state || "";
-      const country = data.address.country || "";
-      let displayName = city;
-      if (state && state !== city) displayName += `, ${state}`;
-      if (country) displayName += `, ${country}`;
-      document.querySelector(".city").textContent = displayName;
-    }
-  } catch {
-    document.querySelector(".city").textContent = "Location unknown";
-  }
-}
-
-async function fetchForecast(lat, lon) {
-  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
-    `&current=temperature_2m,is_day,weathercode,relative_humidity_2m,wind_speed_10m` +
-    `&hourly=temperature_2m,weathercode,precipitation_probability` +
-    `&daily=sunrise,sunset,temperature_2m_max,temperature_2m_min,weathercode,precipitation_probability_max` +
-    `&timezone=auto`;
-  const res = await fetch(url);
-  return res.json();
-}
-
-async function fetchAQI(lat, lon) {
-  const url = `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lat}&longitude=${lon}&current=us_aqi`;
-  const res = await fetch(url);
-  const data = await res.json();
-  return data.current?.us_aqi ?? null;
-}
-
-function updateUI(temp, forecast, aqi) {
-  document.getElementById("temperature").textContent =
-    typeof temp === "number" && !isNaN(temp) ? `${temp.toFixed(1)}°C` : "--°C";
-
-  document.getElementById("icon").textContent =
-    forecast?.current ? getWeatherIcon(forecast.current.weathercode) : "❓";
-
-  document.getElementById("humidity").textContent =
-    forecast?.current ? `${forecast.current.relative_humidity_2m}%` : "--%";
-
-  document.getElementById("wind").textContent =
-    forecast?.current ? `${forecast.current.wind_speed_10m} km/h` : "-- km/h";
-
-  document.getElementById("rain").textContent =
-    forecast?.daily ? `${forecast.daily.precipitation_probability_max[0]}%` : "--%";
-
-  document.getElementById("sunrise").textContent =
-    forecast?.daily ? formatTime(forecast.daily.sunrise[0]) : "--:--";
-
-  document.getElementById("sunset").textContent =
-    forecast?.daily ? formatTime(forecast.daily.sunset[0]) : "--:--";
-
-  document.getElementById("aqi").textContent = aqi != null ? aqi : "--";
-
-  if (forecast?.current) {
-    document.body.classList.toggle("night", !forecast.current.is_day);
-  }
-}
-
-function renderHourly(forecast) {
-  const el = document.getElementById("hourly");
-  el.innerHTML = "";
-
-  const now = new Date().getHours();
-  let start = forecast.hourly.time.findIndex(
-    t => new Date(t).getHours() === now
-  );
-  if (start < 0) start = 0;
-
-  for (let i = start; i < start + 12 && i < forecast.hourly.time.length; i++) {
-    el.innerHTML += `
-      <div class="hour">
-        <div>${new Date(forecast.hourly.time[i])
-          .toLocaleTimeString([], { hour: "numeric" })}</div>
-        <div>${getWeatherIcon(forecast.hourly.weathercode[i])}</div>
-        <div>${forecast.hourly.temperature_2m[i]}°</div>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Weather</title>
+  <link rel="stylesheet" href="wea.css" />
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#2196f3" />
+</head>
+<body class="day">
+  <!-- OFFLINE / LOADING -->
+  <div id="offline">You are offline</div>
+  <div id="loading">Loading…</div>
+  <div class="app">
+    <!-- HEADER -->
+    <header>
+      <h1 class="city">Loading…</h1>
+      <div class="search">
+        <input id="cityInput" placeholder="Search village / city" />
+        <button onclick="searchCity()">Search</button>
       </div>
-    `;
-  }
-}
 
-function renderDaily(forecast) {
-  const el = document.getElementById("daily");
-  el.innerHTML = "";
+      <!-- Theme Switcher -->
+      <div class="theme-switch">
+        <button data-theme="day">☀️ Day</button>
+        <button data-theme="sunset">🌅 Sunset</button>
+        <button data-theme="night">🌙 Night</button>
+        <button data-theme="cloudy">☁️ Cloudy</button>
+      </div>
+    </header>
 
-  forecast.daily.time.slice(0, 7).forEach((date, i) => {
-    const day = new Date(date).toLocaleDateString([], { weekday: "short" });
+    <!-- CURRENT WEATHER -->
+    <section class="current">
+      <div id="icon" class="icon sunny">☀️</div>
+      <div id="temperature" class="temp">--°C</div>
 
-    el.innerHTML += `
-      <div class="day-card">
-        <div class="day-name">${day}</div>
-        <div class="day-icon">
-          ${getWeatherIcon(forecast.daily.weathercode[i])}
+      <div class="metrics">
+        <div class="metric">
+          <span class="label">Humidity</span>
+          <span class="icon">💧</span>
+          <span id="humidity" class="value">--%</span>
         </div>
-        <div class="day-temp">
-          ${Math.round(forecast.daily.temperature_2m_max[i])}°
-          /
-          ${Math.round(forecast.daily.temperature_2m_min[i])}°
+        <div class="metric">
+          <span class="label">Rain</span>
+          <span class="icon">🌧️</span>
+          <span id="rain" class="value">--%</span>
+        </div>
+        <div class="metric">
+          <span class="label">Wind</span>
+          <span class="icon">💨</span>
+          <span id="wind" class="value">-- km/h</span>
+        </div>
+        <div class="metric">
+          <span class="label">AQI</span>
+          <span class="icon">🎚️</span>
+          <span id="aqi" class="value">--</span>
         </div>
       </div>
-    `;
-  });
-}
 
-function getWeatherIcon(code) {
-  if (code === 0) return "☀️";
-  if (code <= 2) return "⛅";
-  if (code <= 48) return "🌫️";
-  if (code <= 67) return "🌧️";
-  if (code <= 77) return "🌨️";
-  if (code <= 82) return "🌦️";
-  if (code <= 99) return "⛈️";
-  return "❓";
-}
+      <div class="sun">
+        <span>🌅 <span id="sunrise">--</span></span>
+        <span>🌇 <span id="sunset">--</span></span>
+      </div>
+    </section>
 
-async function getWeather() {
-  showLoading(true);
-  if (!navigator.onLine) {
-    offlineEl.style.display = "block";
-    showLoading(false);
-    return;
-  }
-  offlineEl.style.display = "none";
+    <!-- HOURLY FORECAST -->
+    <h2>Next 12 Hours</h2>
+    <section id="hourly" class="hourly">
+      <!-- Example 12 hourly cards -->
+      <div class="hour"><div class="hour-time">6 AM</div><div class="hour-icon">☀️</div><div class="hour-temp">22°C</div></div>
+      <div class="hour"><div class="hour-time">7 AM</div><div class="hour-icon">☀️</div><div class="hour-temp">23°C</div></div>
+      <div class="hour"><div class="hour-time">8 AM</div><div class="hour-icon">☀️</div><div class="hour-temp">24°C</div></div>
+      <div class="hour"><div class="hour-time">9 AM</div><div class="hour-icon">☀️</div><div class="hour-temp">25°C</div></div>
+      <div class="hour"><div class="hour-time">10 AM</div><div class="hour-icon">☀️</div><div class="hour-temp">26°C</div></div>
+      <div class="hour"><div class="hour-time">11 AM</div><div class="hour-icon">🌤️</div><div class="hour-temp">27°C</div></div>
+      <div class="hour"><div class="hour-time">12 PM</div><div class="hour-icon">🌤️</div><div class="hour-temp">28°C</div></div>
+      <div class="hour"><div class="hour-time">1 PM</div><div class="hour-icon">☀️</div><div class="hour-temp">28°C</div></div>
+      <div class="hour"><div class="hour-time">2 PM</div><div class="hour-icon">☀️</div><div class="hour-temp">29°C</div></div>
+      <div class="hour"><div class="hour-time">3 PM</div><div class="hour-icon">☀️</div><div class="hour-temp">29°C</div></div>
+      <div class="hour"><div class="hour-time">4 PM</div><div class="hour-icon">🌤️</div><div class="hour-temp">28°C</div></div>
+      <div class="hour"><div class="hour-time">5 PM</div><div class="hour-icon">🌤️</div><div class="hour-temp">27°C</div></div>
+    </section>
+  </div>
 
-  try {
-    await setCityName(latitude, longitude);
-    const [areaTemp, forecast, aqi] = await Promise.all([
-      getAreaTemperature(latitude, longitude),
-      fetchForecast(latitude, longitude),
-      fetchAQI(latitude, longitude)
-    ]);
-    const temp = areaTemp ?? forecast.current.temperature_2m;
+<!-- DAILY FORECAST -->
+<section class="daily-wrapper">
+  <h2 class="daily-heading">7 Days Forecast</h2>
+  <div id="daily" class="daily">
+    <!-- day cards -->
+  </div>
+</section>
 
-    updateUI(temp, forecast, aqi);
-    renderHourly(forecast);  // <-- here is the call for hourly forecast
-    renderDaily(forecast); 
-  } catch (e) {
-    console.error(e);
-    document.querySelector(".city").textContent = "Error loading weather";
-    document.getElementById("temperature").textContent = "--°C";
-  }
-  showLoading(false);
-}
-
-async function searchCity() {
-  const q = document.getElementById("cityInput").value.trim();
-  if (!q) return;
-
-  const r = await fetch(
-    `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1`
-  );
-  const d = await r.json();
-  if (!d.length) return alert("Location not found");
-
-  latitude = +d[0].lat;
-  longitude = +d[0].lon;
-  await getWeather();
-}
-
-if (navigator.geolocation) {
-  navigator.geolocation.getCurrentPosition(
-    p => {
-      latitude = p.coords.latitude;
-      longitude = p.coords.longitude;
-      getWeather();
-    },
-    () => {
-      getWeather(); // fallback if location denied
+  <script src="weather.js"></script>
+  <script>
+    // Automatic day/night theme based on time
+    function setThemeByTime() {
+      const hour = new Date().getHours();
+      if (hour >= 19 || hour < 6) {
+        document.body.classList.add('night');
+      } else {
+        document.body.classList.remove('night');
+      }
     }
-  );
-} else {
-  getWeather(); // fallback if no geolocation
-}
+    setThemeByTime();
+
+    // Manual theme switch
+    const buttons = document.querySelectorAll('.theme-switch button');
+    buttons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.body.className = btn.dataset.theme;
+      });
+    });
+
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("service-worker.js");
+    }
+  </script>
+</body>
+</html>
