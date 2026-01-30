@@ -111,8 +111,20 @@ body.night .current {
   background: var(--card-gradient);
 }
 
-@keyframes float { 0%,100%{transform:translateY(0);}50%{transform:translateY(-6px);} }
-@keyframes glow { from{box-shadow:0 0 20px rgba(255,255,255,0.3);} to{box-shadow:0 0 40px rgba(255,255,255,0.6);} }
+@keyframes float {
+   0%,100%{
+    transform:translateY(0);
+  }50%{
+    transform:translateY(-6px);
+  } 
+}
+@keyframes glow {
+   from{
+    box-shadow:0 0 20px rgba(255,255,255,0.3);
+  } to{
+    box-shadow:0 0 40px rgba(255,255,255,0.6);
+  } 
+}
 
 /* WEATHER ICON */
 .icon {
@@ -120,7 +132,13 @@ body.night .current {
   line-height: 1;
   animation: pulse 2.5s infinite;
 }
-@keyframes pulse { 0%,100%{transform:scale(1);}50%{transform:scale(1.08);} }
+@keyframes pulse {
+   0%,100%{
+    transform:scale(1);
+  }50%{
+    transform:scale(1.08);
+  } 
+}
 
 /* TEMPERATURE */
 .temp {
@@ -180,6 +198,7 @@ body.night .current {
   gap: 8px;
   padding: 8px;
   margin-top: 12px;
+  margin-bottom: 8px; 
 }
 
 .hour {
@@ -191,11 +210,106 @@ body.night .current {
   transition: transform 0.3s, box-shadow 0.3s;
 }
 
-.hour:hover { transform: translateY(-4px); box-shadow: 0 10px 20px rgba(0,0,0,0.2); }
+.hour:hover {
+   transform: translateY(-4px);
+    box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+  }
 
-.hour-time { font-size: 12px; font-weight: 600; opacity: 0.8; }
-.hour-icon { font-size: 22px; margin: 4px 0; }
-.hour-temp { font-size: 13px; font-weight: 700; }
+.hour-time {
+   font-size: 12px; 
+   font-weight: 600; 
+   opacity: 0.8; 
+  }
+
+.hour-icon { 
+  font-size: 22px; 
+  margin: 4px 0; 
+}
+.hour-temp { 
+  font-size: 13px; 
+  font-weight: 700; 
+}
+
+/* DAILY FORECAST WRAPPER (RECTANGLE) */
+.daily-wrapper {
+  margin: 8px auto 16px; /* reduce top margin to 4px to move closer to heading */
+  padding: 18px;
+  border-radius: 22px;
+  background: var(--card-gradient);
+  box-shadow: 0 20px 40px rgba(0,0,0,0.15);
+  animation: float 4s ease-in-out infinite;
+
+  max-width: 900px;
+  width: 100%;
+}
+
+/* GRID INSIDE RECTANGLE */
+.daily {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(80px, 1fr));
+  gap: 14px;
+}
+
+.daily-heading {
+  margin: 0 auto 6px; /* no top margin, 6px bottom */
+  padding-top: 4px;   /* if you want some breathing space */
+  text-align: center;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-main);
+  max-width: 900px;
+}
+
+/* INDIVIDUAL DAY CARD */
+.day-card {
+  background: rgba(255, 255, 255, 0.55);
+  border-radius: 16px;
+  padding: 14px 8px;
+  text-align: center;
+  box-shadow: 0 6px 14px rgba(0,0,0,0.12);
+  transition: transform 0.3s, box-shadow 0.3s;
+}
+
+body.night .day-card {
+  background: rgba(0, 0, 0, 0.35);
+  color: #fff;
+}
+
+.day-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+}
+
+.day-name {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.day-icon {
+  font-size: 26px;
+  margin: 6px 0;
+}
+
+.day-temp {
+  font-size: 13px;
+  font-weight: 700;
+}
 
 /* RESPONSIVE */
-@media (max-width: 900px) { .hourly { grid-template-columns: repeat(6, 1fr); } }
+@media (max-width: 900px) {
+   .hourly {
+     grid-template-columns: repeat(6, 1fr);
+    } 
+  }
+
+@media (max-width: 900px) {
+  .daily {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+@media (max-width: 500px) {
+  .daily {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
